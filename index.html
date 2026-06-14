@@ -345,13 +345,17 @@
       </div>
 
       <div class="verify-status" id="verifyStatus"></div>
-      <button class="btn btn-primary" id="verifyBtn" disabled onclick="verifyCode()">Confirm Contribution ❤️</button>
+      <button class="btn btn-primary" id="verifyBtn" disabled onclick="verifyCode()">Send Receipt & Verify Code ❤️</button>
       <button class="btn btn-ghost" onclick="closeModal()">Maybe Later</button>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script>
+    emailjs.init('email_H8zuStoHKnQx6OsZbR24Gl4m');
+  </script>
   <script>
     const QUOTES = [
       '"Light up the world around you."',
@@ -445,22 +449,58 @@
       updateBtn();
     });
     $('codeInput').addEventListener('input', updateBtn);
-    function updateBtn() { $('verifyBtn').disabled = !(selectedFile && $('codeInput').value.trim().length >= 3); }
+    function updateBtn() { $('verifyBtn').disabled = !selectedFile; }
 
-    function verifyCode() {
-      const entered = $('codeInput').value.trim().toLowerCase();
+    async function verifyCode() {
       const vs = $('verifyStatus');
-      if (entered === CORRECT_CODE) {
-        vs.className = 'verify-status visible success';
-        vs.innerHTML = '<strong>✅ Thank you so much!</strong>Your support means the world! LuxTorch is grateful for you. 🎉';
-        unlocked = true;
-        localStorage.setItem('lt_unlocked', '1');
-        $('modeVal').textContent = 'Supporter ⭐';
-        $('verifyBtn').disabled = true;
-        setTimeout(() => { closeModal(); if (torchOn) turnOff(); showToast('🌟 You are a LuxTorch Supporter!'); }, 2000);
-      } else {
+      if (!selectedFile) return;
+
+      // Show sending state
+      $('verifyBtn').disabled = true;
+      vs.className = 'verify-status visible';
+      vs.style.background = 'rgba(0,212,255,0.06)';
+      vs.style.border = '1px solid rgba(0,212,255,0.2)';
+      vs.style.color = 'var(--cyan)';
+      vs.innerHTML = '<strong>📤 Sending receipt...</strong>Please wait while we send your receipt.';
+
+      try {
+        // Convert image to base64
+        const base64 = await new Promise((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result);
+          reader.onerror = rej;
+          reader.readAsDataURL(selectedFile);
+        });
+
+        await emailjs.send('service_zncn1f3', 'template_5zyxvp4', {
+          to_email: 'mehaalkhan.2@gmail.com',
+          from_name: 'LuxTorch App',
+          subject: '💰 New Payment Receipt - LuxTorch',
+          message: `A user has submitted a payment receipt.\n\nSubmitted at: ${new Date().toLocaleString()}\nFile name: ${selectedFile.name}\nFile size: ${(selectedFile.size/1024).toFixed(1)} KB\n\nPlease verify the Easypaisa payment of Rs. 1,000 to 03451959533 and send the code: mehaal123321`,
+          image_data: base64,
+        });
+
+        // Email sent — now check the code
+        const entered = $('codeInput').value.trim().toLowerCase();
+        vs.style = '';
+        if (entered === CORRECT_CODE) {
+          vs.className = 'verify-status visible success';
+          vs.innerHTML = '<strong>✅ Receipt sent & code verified!</strong>Your support means the world! LuxTorch is grateful for you 🎉';
+          unlocked = true;
+          localStorage.setItem('lt_unlocked', '1');
+          $('modeVal').textContent = 'Supporter ⭐';
+          setTimeout(() => { closeModal(); if (torchOn) turnOff(); showToast('🌟 You are a LuxTorch Supporter!'); }, 2000);
+        } else {
+          vs.className = 'verify-status visible success';
+          vs.innerHTML = '<strong>📧 Receipt sent to developer!</strong>You\'ll receive your confirmation code on WhatsApp shortly. Enter it above once received.';
+          $('verifyBtn').disabled = false;
+        }
+
+      } catch (err) {
+        vs.style = '';
         vs.className = 'verify-status visible fail';
-        vs.innerHTML = '<strong>❌ Incorrect Code</strong>Please check the code sent to you on WhatsApp and try again.';
+        vs.innerHTML = `<strong>❌ Failed to send receipt</strong>Check your internet connection and try again.`;
+        $('verifyBtn').disabled = false;
       }
     }
 
