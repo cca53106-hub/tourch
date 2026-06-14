@@ -174,18 +174,24 @@
     .step-text { font-size: 13px; color: var(--muted); line-height: 1.55; padding-top: 3px; }
     .step-text strong { color: var(--text); }
 
-    .upload-zone { border: 2px dashed rgba(255,255,255,0.1); border-radius: var(--radius-sm);
-      padding: 28px 20px; text-align: center; cursor: pointer; transition: all 0.3s;
-      position: relative; overflow: hidden; margin-bottom: 14px; }
-    .upload-zone:hover { border-color: rgba(0,212,255,0.35); background: var(--cyan-dim); }
-    .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-    .upload-icon { font-size: 32px; margin-bottom: 8px; }
-    .upload-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-    .upload-sub { font-size: 12px; color: var(--muted); }
+    .url-input-wrap { margin-bottom: 14px; }
+    .url-input-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 8px; display: block; }
+    .url-input-row { display: flex; gap: 8px; }
+    .url-input { flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 14px 16px; color: var(--text); font-size: 14px;
+      outline: none; transition: border-color 0.2s; }
+    .url-input:focus { border-color: rgba(0,212,255,0.4); }
+    .url-input::placeholder { color: var(--muted); font-size: 12px; }
+    .url-preview-btn { flex-shrink: 0; background: var(--cyan-dim); border: 1px solid rgba(0,212,255,0.22);
+      border-radius: var(--radius-sm); padding: 0 14px; color: var(--cyan); font-size: 12px; font-weight: 700;
+      cursor: pointer; white-space: nowrap; }
+    .url-preview-btn:active { opacity: 0.6; }
 
     .preview-img { width: 100%; border-radius: var(--radius-sm); max-height: 200px;
       object-fit: cover; display: none; margin-bottom: 14px; border: 1px solid var(--border); }
     .preview-img.visible { display: block; }
+    .url-hint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
 
     .code-section { margin-bottom: 14px; }
     .code-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
@@ -327,16 +333,18 @@
 
       <div class="steps">
         <div class="step"><div class="step-num">1</div><div class="step-text">Send <strong>Rs. 1,000</strong> via Easypaisa to <strong>03451959533</strong></div></div>
-        <div class="step"><div class="step-num">2</div><div class="step-text">Upload a screenshot of your transaction receipt below</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Take a screenshot, upload it to <strong>Imgur / Google Drive</strong>, and paste the image link below</div></div>
         <div class="step"><div class="step-num">3</div><div class="step-text">You'll receive a <strong>confirmation code on WhatsApp</strong> — enter it to complete</div></div>
       </div>
 
       <img class="preview-img" id="previewImg" alt="Receipt" />
-      <div class="upload-zone" id="uploadZone">
-        <input type="file" id="fileInput" accept="image/*" />
-        <div class="upload-icon">📸</div>
-        <div class="upload-title">Upload Payment Receipt</div>
-        <div class="upload-sub">Tap to choose screenshot or take a photo</div>
+      <div class="url-input-wrap">
+        <span class="url-input-label">📎 Receipt Image URL</span>
+        <div class="url-input-row">
+          <input class="url-input" id="urlInput" type="url" placeholder="Paste image URL (e.g. https://...)" autocomplete="off" />
+          <button class="url-preview-btn" onclick="previewUrl()">Preview</button>
+        </div>
+        <div class="url-hint">💡 Upload your screenshot to Google Drive, Imgur, or any image host and paste the link here.</div>
       </div>
 
       <div class="code-section">
@@ -370,11 +378,28 @@
     let torchOn = false;
     let unlocked = localStorage.getItem('lt_unlocked') === '1';
     let sessionCount = 0, sessionStart = null, timerInterval = null;
-    let selectedFile = null, quoteIdx = 0;
+    let receiptUrl = '', quoteIdx = 0;
 
     const $ = id => document.getElementById(id);
     if (unlocked) $('modeVal').textContent = 'Supporter ⭐';
     $('quoteText').textContent = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+
+    // Restore torch state when app reopens
+    if (localStorage.getItem('lt_torch') === '1') {
+      setTimeout(() => turnOn(), 300);
+    }
+
+    // Save torch state on visibility change (app goes to background / tab hidden)
+    document.addEventListener('visibilitychange', () => {
+      localStorage.setItem('lt_torch', torchOn ? '1' : '0');
+    });
+    // Also save on page unload
+    window.addEventListener('pagehide', () => {
+      localStorage.setItem('lt_torch', torchOn ? '1' : '0');
+    });
+    window.addEventListener('beforeunload', () => {
+      localStorage.setItem('lt_torch', torchOn ? '1' : '0');
+    });
 
     // Torch toggle
     $('torchBtn').addEventListener('click', () => torchOn ? (unlocked ? turnOff() : openModal()) : turnOn());
@@ -388,6 +413,7 @@
       $('btnHint').textContent = 'TURN OFF';
       sessionStart = Date.now();
       startTimer(); flashlight(true); rotateQuote();
+      localStorage.setItem('lt_torch', '1');
     }
     function turnOff() {
       torchOn = false;
@@ -397,6 +423,7 @@
       $('btnHint').textContent = 'TURN ON';
       sessionCount++; $('sessionCount').textContent = sessionCount;
       stopTimer(); flashlight(false);
+      localStorage.setItem('lt_torch', '0');
     }
     function rotateQuote() {
       quoteIdx = (quoteIdx + 1) % QUOTES.length;
@@ -432,30 +459,42 @@
     $('payModal').addEventListener('click', e => { if (e.target === $('payModal')) closeModal(); });
 
     function resetModal() {
-      selectedFile = null;
+      receiptUrl = '';
       $('previewImg').classList.remove('visible'); $('previewImg').src = '';
-      $('uploadZone').style.display = '';
+      $('urlInput').value = '';
       $('verifyStatus').className = 'verify-status'; $('verifyStatus').innerHTML = '';
-      $('codeInput').value = ''; $('fileInput').value = '';
+      $('codeInput').value = '';
       updateBtn();
     }
 
-    $('fileInput').addEventListener('change', e => {
-      const f = e.target.files[0]; if (!f) return;
-      selectedFile = f;
-      $('previewImg').src = URL.createObjectURL(f);
-      $('previewImg').classList.add('visible');
-      $('uploadZone').style.display = 'none';
+    // URL input & preview
+    $('urlInput').addEventListener('input', () => {
+      receiptUrl = $('urlInput').value.trim();
+      if (!receiptUrl) {
+        $('previewImg').classList.remove('visible');
+        $('previewImg').src = '';
+      }
       updateBtn();
     });
+
+    function previewUrl() {
+      const url = $('urlInput').value.trim();
+      if (!url) { showToast('⚠️ Please paste an image URL first'); return; }
+      const img = $('previewImg');
+      img.onerror = () => { img.classList.remove('visible'); showToast('❌ Could not load image from URL'); };
+      img.onload = () => { img.classList.add('visible'); };
+      img.src = url;
+      receiptUrl = url;
+      updateBtn();
+    }
+
     $('codeInput').addEventListener('input', updateBtn);
-    function updateBtn() { $('verifyBtn').disabled = !selectedFile; }
+    function updateBtn() { $('verifyBtn').disabled = !receiptUrl; }
 
     async function verifyCode() {
       const vs = $('verifyStatus');
-      if (!selectedFile) return;
+      if (!receiptUrl) return;
 
-      // Show sending state
       $('verifyBtn').disabled = true;
       vs.className = 'verify-status visible';
       vs.style.background = 'rgba(0,212,255,0.06)';
@@ -464,23 +503,14 @@
       vs.innerHTML = '<strong>📤 Sending receipt...</strong>Please wait while we send your receipt.';
 
       try {
-        // Convert image to base64
-        const base64 = await new Promise((res, rej) => {
-          const reader = new FileReader();
-          reader.onload = () => res(reader.result);
-          reader.onerror = rej;
-          reader.readAsDataURL(selectedFile);
-        });
-
         await emailjs.send('service_zncn1f3', 'template_5zyxvp4', {
           to_email: 'mehaalkhan.2@gmail.com',
           from_name: 'LuxTorch App',
           subject: '💰 New Payment Receipt - LuxTorch',
-          message: `A user has submitted a payment receipt.\n\nSubmitted at: ${new Date().toLocaleString()}\nFile name: ${selectedFile.name}\nFile size: ${(selectedFile.size/1024).toFixed(1)} KB\n\nPlease verify the Easypaisa payment of Rs. 1,000 to 03451959533 and send the code: mehaal123321`,
-          image_data: base64,
+          message: `A user has submitted a payment receipt.\n\nSubmitted at: ${new Date().toLocaleString()}\nReceipt Image URL: ${receiptUrl}\n\nPlease verify the Easypaisa payment of Rs. 1,000 to 03451959533 and send the code: mehaal123321`,
+          image_data: receiptUrl,
         });
 
-        // Email sent — now check the code
         const entered = $('codeInput').value.trim().toLowerCase();
         vs.style = '';
         if (entered === CORRECT_CODE) {
